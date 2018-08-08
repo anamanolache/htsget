@@ -45,8 +45,9 @@ import (
 )
 
 const (
-	readsPath = "/reads/"
-	blockPath = "/block/"
+	readsPath    = "/reads/"
+	blockPath    = "/block/"
+	variantsPath = "/variants/"
 
 	eofMarkerDataURL = "data:;base64,H4sIBAAAAAAA/wYAQkMCABsAAwAAAAAAAAAAAA=="
 )
@@ -93,6 +94,7 @@ func (server *Server) Whitelist(buckets []string) {
 func (server *Server) Export(mux *http.ServeMux) {
 	mux.Handle(readsPath, forwardOrigin(server.serveReads))
 	mux.Handle(blockPath, forwardOrigin(server.serveBlocks))
+	mux.Handle(variantsPath, forwardOrigin(server.serveVariants))
 }
 
 func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
@@ -245,6 +247,73 @@ func (server *Server) serveBlocks(w http.ResponseWriter, req *http.Request) {
 		log.Printf("Failed to copy response: %v", err)
 		return
 	}
+}
+
+func (server *Server) serveVariants(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+
+	w.Header().Add("Content-type", "application/json")
+	w.WriteHeader(200)
+
+	bucket, object, err := parseID(req.URL.Path[len(variantsPath):])
+	if err != nil {
+		writeError(w, newInvalidInputError("parsing readset ID", err))
+		return
+	}
+
+	if err := server.checkWhitelist(bucket); err != nil {
+		writeError(w, newPermissionDeniedError("checking whitelist", err))
+		return
+	}
+
+	gcs, _, err := server.newStorageClient(req)
+	if err != nil {
+		writeError(w, newStorageError("creating client", err))
+		return
+	}
+
+	data, err := gcs.Bucket(bucket).Object(object).NewRangeReader(ctx, 0, int64(server.blockSizeLimit))
+	if err != nil {
+		writeError(w, newStorageError("opening data", err))
+		return
+	}
+	defer data.Close()
+
+	request := &variantsRequest{
+		indexObjects: []*storage.ObjectHandle{gcs.Bucket(bucket).Object(object + ".gz.csi"),
+			gcs.Bucket(bucket).Object(object + ".csi"),
+		},
+		blockSizeLimit: server.blockSizeLimit,
+		region:         genomics.Region{},
+	}
+
+	chunks, err := request.handle(ctx)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	for _, chunk := range chunks {
+		request := &blockRequest{
+			object: gcs.Bucket(bucket).Object(object),
+			chunk:  *chunk,
+		}
+
+		response, err := request.handle(req.Context())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		defer response.Close()
+
+		w.Header().Add("Content-type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		if _, err := io.Copy(w, response); err != nil {
+			log.Printf("Failed to copy response: %v", err)
+			return
+		}
+	}
+
 }
 
 func (server *Server) checkWhitelist(bucket string) error {
