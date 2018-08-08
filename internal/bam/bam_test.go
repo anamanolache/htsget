@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
+	"github.com/googlegenomics/htsget/internal/common"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
@@ -215,7 +216,7 @@ func TestBinsForRange(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, want := binsForRange(tc.start, tc.end), tc.bins; !reflect.DeepEqual(got, want) {
+			if got, want := common.BinsForRange(tc.start, tc.end, 14, 5), tc.bins; !reflect.DeepEqual(got, want) {
 				t.Fatalf("binsForRange(%v, %v) = %+v, want %+v", tc.start, tc.end, got, want)
 			}
 		})
