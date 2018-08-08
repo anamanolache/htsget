@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
-	"github.com/googlegenomics/htsget/internal/common"
+	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
@@ -195,7 +195,7 @@ func TestRead_Region(t *testing.T) {
 }
 
 func TestBinsForRange(t *testing.T) {
-	allBins := make([]uint16, metadataID-1)
+	allBins := make([]uint16, csi.MetadataBeanID-1)
 	for i := range allBins {
 		allBins[i] = uint16(i)
 	}
@@ -216,7 +216,7 @@ func TestBinsForRange(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, want := common.BinsForRange(tc.start, tc.end, 14, 5), tc.bins; !reflect.DeepEqual(got, want) {
+			if got, want := csi.BinsForRange(tc.start, tc.end, 14, 5), tc.bins; !reflect.DeepEqual(got, want) {
 				t.Fatalf("binsForRange(%v, %v) = %+v, want %+v", tc.start, tc.end, got, want)
 			}
 		})
