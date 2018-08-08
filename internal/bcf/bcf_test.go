@@ -19,6 +19,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
 func TestGetReferenceId(t *testing.T) {
@@ -92,6 +94,41 @@ func TestGetIDX(t *testing.T) {
 		t.Run(tc.line, func(t *testing.T) {
 			if got, _ := getIdx(tc.line); got != tc.want {
 				t.Fatalf("Wrong getIdx response, want %d, got %d ", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestRegionRead(t *testing.T) {
+	testCases := []struct {
+		refId  int32
+		start  uint32
+		end    uint32
+		chunks int
+	}{
+		{0, 93822816, 93825705, 2},
+		{0, 0, 1000000, 1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d(%d-%d)", tc.refId, tc.start, tc.end), func(t *testing.T) {
+			r, err := os.Open("testdata/sample.bcf.gz.csi")
+			if err != nil {
+				t.Fatalf("Failed to open testdata: %v", err)
+			}
+			defer r.Close()
+
+			region := genomics.Region{
+				ReferenceID: tc.refId,
+				Start:       tc.start,
+				End:         tc.end,
+			}
+			chunks, err := Read(r, region)
+			if err != nil {
+				t.Fatalf("Read() returned unexpected error: %v", err)
+			}
+			if got, want := len(chunks), tc.chunks; got != want {
+				t.Fatalf("Wrong number of chunks: got %d, want %d", got, want)
 			}
 		})
 	}
