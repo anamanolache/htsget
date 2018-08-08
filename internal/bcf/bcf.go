@@ -25,6 +25,7 @@ import (
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
 	"github.com/googlegenomics/htsget/internal/common"
+	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
@@ -116,8 +117,8 @@ func getIdx(contig string) (int, error) {
 // Read reads index data from csi and returns a set of BGZF chunks covering
 // the header and all mapped reads that fall inside the specified region.  The
 // first chunk is always the BCF header.
-func Read(csi io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
-	gzr, err := gzip.NewReader(csi)
+func Read(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
+	gzr, err := gzip.NewReader(csiFile)
 	if err != nil {
 		return nil, fmt.Errorf("initializing gzip reader: %v", err)
 	}
@@ -134,7 +135,7 @@ func Read(csi io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 	if err := common.Read(gzr, &depth); err != nil {
 		return nil, fmt.Errorf("reading depth of binary index: %v", err)
 	}
-	bins := common.BinsForRange(region.Start, region.End, minShift, depth)
+	bins := csi.BinsForRange(region.Start, region.End, minShift, depth)
 
 	var laux int32
 	if err := common.Read(gzr, &laux); err != nil {
@@ -165,13 +166,13 @@ func Read(csi io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 				return nil, fmt.Errorf("reading bin header: %v", err)
 			}
 
-			includeChunks := common.RegionContainsBin(region, reference, bin.ID, bins)
+			includeChunks := csi.RegionContainsBin(region, reference, bin.ID, bins)
 			for k := int32(0); k < bin.Chunks; k++ {
 				var chunk bgzf.Chunk
 				if err := common.Read(gzr, &chunk); err != nil {
 					return nil, fmt.Errorf("reading chunk: %v", err)
 				}
-				if bin.ID == common.MetadataBeanID {
+				if bin.ID == csi.MetadataBeanID {
 					continue
 				}
 				if includeChunks && (chunk.End >= bgzf.Address(bin.Offset)) {

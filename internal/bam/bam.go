@@ -23,6 +23,7 @@ import (
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
 	"github.com/googlegenomics/htsget/internal/common"
+	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
@@ -101,7 +102,7 @@ func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 		return nil, fmt.Errorf("reading reference count: %v", err)
 	}
 
-	bins := common.BinsForRange(region.Start, region.End, 14, 5)
+	bins := csi.BinsForRange(region.Start, region.End, 14, 5)
 
 	header := &bgzf.Chunk{End: bgzf.LastAddress}
 	chunks := []*bgzf.Chunk{header}
@@ -120,13 +121,13 @@ func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 				return nil, fmt.Errorf("reading bin header: %v", err)
 			}
 
-			includeChunks := common.RegionContainsBin(region, i, bin.ID, bins)
+			includeChunks := csi.RegionContainsBin(region, i, bin.ID, bins)
 			for k := int32(0); k < bin.Chunks; k++ {
 				var chunk bgzf.Chunk
 				if err := common.Read(bai, &chunk); err != nil {
 					return nil, fmt.Errorf("reading chunk: %v", err)
 				}
-				if bin.ID == common.MetadataBeanID {
+				if bin.ID == csi.MetadataBeanID {
 					continue
 				}
 				if includeChunks {
