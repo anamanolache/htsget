@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+// Package binary provides support for operating on binary data.
+package binary
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 )
 
-// ChecksMagic checks the magic bytes from the provided reader.
-func CheckMagic(r io.Reader, want []byte) error {
+// ExpectBytes reads len(want) bytes from r and returns an error on mismatch.
+func ExpectBytes(r io.Reader, want []byte) error {
 	got := make([]byte, len(want))
-	if err := Read(r, &got); err != nil {
-		return fmt.Errorf("reading magic: %v", err)
+	if _, err := io.ReadFull(r, got); err != nil {
+		return fmt.Errorf("reading bytes: %v", err)
 	}
-	for i, n := 0, len(want); i < n; i++ {
-		if got[i] != want[i] {
-			return fmt.Errorf("wrong magic %v (wanted %v)", got, want)
-		}
+	if !bytes.Equal(got, want) {
+		return fmt.Errorf("comparing bytes: got %q, want %q", got, want)
 	}
 	return nil
 }
 
-// Read reads the value from the provided reader into the provided interface.
+// Read reads a little endian value from r into v using binary.Read.
 func Read(r io.Reader, v interface{}) error {
 	return binary.Read(r, binary.LittleEndian, v)
 }

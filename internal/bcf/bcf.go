@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
-	"github.com/googlegenomics/htsget/internal/common"
+	"github.com/googlegenomics/htsget/internal/binary"
 	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
@@ -43,12 +43,12 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
 	}
 	defer gzr.Close()
 
-	if err := common.CheckMagic(gzr, []byte(bcfMagic)); err != nil {
+	if err := binary.ExpectBytes(gzr, []byte(bcfMagic)); err != nil {
 		return 0, fmt.Errorf("checking magic of BCF file: %v", err)
 	}
 
 	var length uint32
-	if err := common.Read(gzr, &length); err != nil {
+	if err := binary.Read(gzr, &length); err != nil {
 		return 0, fmt.Errorf("reading header length: %v", err)
 	}
 
@@ -123,22 +123,22 @@ func Read(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 		return nil, fmt.Errorf("initializing gzip reader: %v", err)
 	}
 	defer gzr.Close()
-	if err := common.CheckMagic(gzr, []byte(csiMagic)); err != nil {
+	if err := binary.ExpectBytes(gzr, []byte(csiMagic)); err != nil {
 		return nil, fmt.Errorf("checking magic: %v", err)
 	}
 
 	var minShift int32
-	if err := common.Read(gzr, &minShift); err != nil {
+	if err := binary.Read(gzr, &minShift); err != nil {
 		return nil, fmt.Errorf("reading # bits for the minimal interval (min_shift): %v", err)
 	}
 	var depth int32
-	if err := common.Read(gzr, &depth); err != nil {
+	if err := binary.Read(gzr, &depth); err != nil {
 		return nil, fmt.Errorf("reading depth of binary index: %v", err)
 	}
 	bins := csi.BinsForRange(region.Start, region.End, minShift, depth)
 
 	var laux int32
-	if err := common.Read(gzr, &laux); err != nil {
+	if err := binary.Read(gzr, &laux); err != nil {
 		return nil, fmt.Errorf("reading length of auxiliary data: %v", err)
 	}
 	if _, err := io.CopyN(ioutil.Discard, gzr, int64(laux)); err != nil {
@@ -148,12 +148,12 @@ func Read(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 	header := &bgzf.Chunk{End: bgzf.LastAddress}
 	chunks := []*bgzf.Chunk{header}
 	var refCount int32
-	if err := common.Read(gzr, &refCount); err != nil {
+	if err := binary.Read(gzr, &refCount); err != nil {
 		return nil, fmt.Errorf("reading the number of reference sequences: %v", err)
 	}
 	for reference := int32(0); reference < refCount; reference++ {
 		var binCount int32
-		if err := common.Read(gzr, &binCount); err != nil {
+		if err := binary.Read(gzr, &binCount); err != nil {
 			return nil, fmt.Errorf("reading bin count: %v", err)
 		}
 		for j := int32(0); j < binCount; j++ {
@@ -162,14 +162,14 @@ func Read(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 				Offset uint64
 				Chunks int32
 			}
-			if err := common.Read(gzr, &bin); err != nil {
+			if err := binary.Read(gzr, &bin); err != nil {
 				return nil, fmt.Errorf("reading bin header: %v", err)
 			}
 
 			includeChunks := csi.RegionContainsBin(region, reference, bin.ID, bins)
 			for k := int32(0); k < bin.Chunks; k++ {
 				var chunk bgzf.Chunk
-				if err := common.Read(gzr, &chunk); err != nil {
+				if err := binary.Read(gzr, &chunk); err != nil {
 					return nil, fmt.Errorf("reading chunk: %v", err)
 				}
 				if bin.ID == csi.MetadataBeanID {

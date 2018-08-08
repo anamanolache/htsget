@@ -22,7 +22,7 @@ import (
 	"io/ioutil"
 
 	"github.com/googlegenomics/htsget/internal/bgzf"
-	"github.com/googlegenomics/htsget/internal/common"
+	"github.com/googlegenomics/htsget/internal/binary"
 	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
@@ -52,22 +52,22 @@ func GetReferenceID(bam io.Reader, reference string) (int32, error) {
 		return 0, fmt.Errorf("opening archive: %v", err)
 	}
 
-	if err := common.CheckMagic(bam, []byte(bamMagic)); err != nil {
-		return 0, fmt.Errorf("checking magic: %v", err)
+	if err := binary.ExpectBytes(bam, []byte(bamMagic)); err != nil {
+		return 0, fmt.Errorf("reading magic: %v", err)
 	}
 	var length int32
-	if err := common.Read(bam, &length); err != nil {
+	if err := binary.Read(bam, &length); err != nil {
 		return 0, fmt.Errorf("reading SAM header length: %v", err)
 	}
 	if _, err := io.CopyN(ioutil.Discard, bam, int64(length)); err != nil {
 		return 0, fmt.Errorf("reading past SAM header: %v", err)
 	}
 	var count int32
-	if err := common.Read(bam, &count); err != nil {
+	if err := binary.Read(bam, &count); err != nil {
 		return 0, fmt.Errorf("reading references count: %v", err)
 	}
 	for i := int32(0); i < count; i++ {
-		if err := common.Read(bam, &length); err != nil {
+		if err := binary.Read(bam, &length); err != nil {
 			return 0, fmt.Errorf("reading name length: %v", err)
 		}
 		// The name length includes a null terminating character.
@@ -82,7 +82,7 @@ func GetReferenceID(bam io.Reader, reference string) (int32, error) {
 			return i, nil
 		}
 		// Read and discard the reference length (4 bytes);
-		if err := common.Read(bam, &length); err != nil {
+		if err := binary.Read(bam, &length); err != nil {
 			return 0, fmt.Errorf("reading reference length: %v", err)
 		}
 	}
@@ -93,12 +93,12 @@ func GetReferenceID(bam io.Reader, reference string) (int32, error) {
 // the header and all mapped reads that fall inside the specified region.  The
 // first chunk is always the BAM header.
 func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
-	if err := common.CheckMagic(bai, []byte(baiMagic)); err != nil {
-		return nil, fmt.Errorf("checking magic: %v", err)
+	if err := binary.ExpectBytes(bai, []byte(baiMagic)); err != nil {
+		return nil, fmt.Errorf("reading magic: %v", err)
 	}
 
 	var references int32
-	if err := common.Read(bai, &references); err != nil {
+	if err := binary.Read(bai, &references); err != nil {
 		return nil, fmt.Errorf("reading reference count: %v", err)
 	}
 
@@ -108,7 +108,7 @@ func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 	chunks := []*bgzf.Chunk{header}
 	for i := int32(0); i < references; i++ {
 		var binCount int32
-		if err := common.Read(bai, &binCount); err != nil {
+		if err := binary.Read(bai, &binCount); err != nil {
 			return nil, fmt.Errorf("reading bin count: %v", err)
 		}
 		var candidates []*bgzf.Chunk
@@ -117,14 +117,14 @@ func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 				ID     uint32
 				Chunks int32
 			}
-			if err := common.Read(bai, &bin); err != nil {
+			if err := binary.Read(bai, &bin); err != nil {
 				return nil, fmt.Errorf("reading bin header: %v", err)
 			}
 
 			includeChunks := csi.RegionContainsBin(region, i, bin.ID, bins)
 			for k := int32(0); k < bin.Chunks; k++ {
 				var chunk bgzf.Chunk
-				if err := common.Read(bai, &chunk); err != nil {
+				if err := binary.Read(bai, &chunk); err != nil {
 					return nil, fmt.Errorf("reading chunk: %v", err)
 				}
 				if bin.ID == csi.MetadataBeanID {
@@ -140,14 +140,14 @@ func Read(bai io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 		}
 
 		var intervals int32
-		if err := common.Read(bai, &intervals); err != nil {
+		if err := binary.Read(bai, &intervals); err != nil {
 			return nil, fmt.Errorf("reading interval count: %v", err)
 		}
 		if intervals < 0 {
 			return nil, fmt.Errorf("invalid interval count (%d intervals)", intervals)
 		}
 		offsets := make([]uint64, intervals)
-		if err := common.Read(bai, &offsets); err != nil {
+		if err := binary.Read(bai, &offsets); err != nil {
 			return nil, fmt.Errorf("reading offsets: %v", err)
 		}
 
