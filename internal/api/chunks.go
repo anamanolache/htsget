@@ -18,19 +18,21 @@ import (
 	"context"
 	"fmt"
 
+	"io"
+
 	"cloud.google.com/go/storage"
-	"github.com/googlegenomics/htsget/internal/bcf"
 	"github.com/googlegenomics/htsget/internal/bgzf"
 	"github.com/googlegenomics/htsget/internal/genomics"
 )
 
-type variantsRequest struct {
+type chunksRequest struct {
 	indexObjects   []*storage.ObjectHandle
 	blockSizeLimit uint64
 	region         genomics.Region
+	read           func(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error)
 }
 
-func (req *variantsRequest) handle(ctx context.Context) ([]*bgzf.Chunk, error) {
+func (req *chunksRequest) handle(ctx context.Context) ([]*bgzf.Chunk, error) {
 	var index *storage.Reader
 	var err error
 	for _, object := range req.indexObjects {
@@ -44,7 +46,7 @@ func (req *variantsRequest) handle(ctx context.Context) ([]*bgzf.Chunk, error) {
 	}
 	defer index.Close()
 
-	chunks, err := bcf.Read(index, req.region)
+	chunks, err := req.read(index, req.region)
 	if err != nil {
 		return nil, fmt.Errorf("reading index: %v", err)
 	}

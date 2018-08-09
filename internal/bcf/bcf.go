@@ -33,7 +33,7 @@ const (
 
 // GetReferenceID retrieves the reference id of the given referenceName
 // from the provided bcf file.
-func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
+func GetReferenceID(bcf io.Reader, referenceName string) (int32, error) {
 	gzr, err := gzip.NewReader(bcf)
 	if err != nil {
 		return 0, fmt.Errorf("initializing gzip reader: %v", err)
@@ -51,7 +51,7 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
 
 	headerReader := io.LimitReader(gzr, int64(length))
 	scanner := bufio.NewScanner(headerReader)
-	var id int
+	var id int32
 	for scanner.Scan() {
 		if line := scanner.Text(); strings.HasPrefix(line, "##contig") {
 			if contigField(line, "ID") == referenceName {
@@ -60,7 +60,7 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
 					return 0, fmt.Errorf("getting idx: %v", err)
 				}
 				if idx > -1 {
-					return idx, nil
+					return int32(idx), nil
 				}
 				return id, nil
 			}
@@ -75,6 +75,13 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
 		return 0, fmt.Errorf("scanning header: %v", err)
 	}
 	return 0, errors.New("reference name not found")
+}
+
+func GetIndexNames(object string) []string {
+	return []string{
+		object + ".csi",
+		strings.TrimSuffix(object, ".bcf.gz") + ".csi",
+	}
 }
 
 func contigField(input, name string) string {
