@@ -25,7 +25,7 @@ func TestGetReferenceId(t *testing.T) {
 	testCases := []struct {
 		file   string
 		name   string
-		id     int
+		id     int32
 		errMsg string
 	}{
 		// The test file bcf_with_idx.bcf.gz has the chr2 line before the chr1 line
