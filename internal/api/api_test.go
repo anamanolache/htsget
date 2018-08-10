@@ -72,42 +72,50 @@ func TestMissingObject(t *testing.T) {
 		testQuery(ctx, t, "/reads/foo/bar"))
 }
 
-func TestSimpleRead(t *testing.T) {
+func TestSimpleChunkQuery(t *testing.T) {
+	testCases := []struct{ name, url string }{
+		{"reads query", "/reads/testdata/NA12878.chr20.sample.bam"},
+		{"variants query", "/variants/testdata/small.bcf.gz"},
+	}
 	fakeClient := &http.Client{Transport: &fakeGCS{t}}
 	ctx := context.WithValue(context.Background(), testHTTPClientKey, fakeClient)
-	resp := testQuery(ctx, t, "/reads/testdata/NA12878.chr20.sample.bam")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := testQuery(ctx, t, "/reads/testdata/NA12878.chr20.sample.bam")
 
-	if got, want := resp.StatusCode, http.StatusOK; got != want {
-		t.Errorf("Wrong status code: got %v, want %v", got, want)
-	}
+			if got, want := resp.StatusCode, http.StatusOK; got != want {
+				t.Errorf("Wrong status code: got %v, want %v", got, want)
+			}
 
-	var body struct {
-		URLs []struct {
-			URL string `json:"url"`
-		} `json:"urls"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+			var body struct {
+				URLs []struct {
+					URL string `json:"url"`
+				} `json:"urls"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
 
-	for _, url := range body.URLs {
-		if url.URL == eofMarkerDataURL {
-			continue
-		}
+			for _, url := range body.URLs {
+				if url.URL == eofMarkerDataURL {
+					continue
+				}
 
-		resp := testQuery(ctx, t, url.URL)
-		if got, want := resp.StatusCode, http.StatusOK; got != want {
-			t.Errorf("Wrong status code: got %v, want %v", got, want)
-			continue
-		}
-		length, err := io.Copy(ioutil.Discard, resp.Body)
-		if err != nil {
-			t.Errorf("Failed to read response body: %v", err)
-			continue
-		}
-		if got, want := length, int64(testBlockSizeLimit); got > want {
-			t.Errorf("Data block too large: got %v, want at most %v", got, want)
-		}
+				resp := testQuery(ctx, t, url.URL)
+				if got, want := resp.StatusCode, http.StatusOK; got != want {
+					t.Errorf("Wrong status code: got %v, want %v", got, want)
+					continue
+				}
+				length, err := io.Copy(ioutil.Discard, resp.Body)
+				if err != nil {
+					t.Errorf("Failed to read response body: %v", err)
+					continue
+				}
+				if got, want := length, int64(testBlockSizeLimit); got > want {
+					t.Errorf("Data block too large: got %v, want at most %v", got, want)
+				}
+			}
+		})
 	}
 }
 
