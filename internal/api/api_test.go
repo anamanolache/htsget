@@ -75,7 +75,7 @@ func TestMissingObject(t *testing.T) {
 func TestSimpleChunkQuery(t *testing.T) {
 	testCases := []struct{ name, url string }{
 		{"reads query", "/reads/testdata/NA12878.chr20.sample.bam"},
-		{"variants query", "/variants/testdata/small.bcf.gz"},
+		{"variants query", "/variants/testdata/sample.bcf.gz"},
 	}
 	fakeClient := &http.Client{Transport: &fakeGCS{t}}
 	ctx := context.WithValue(context.Background(), testHTTPClientKey, fakeClient)
