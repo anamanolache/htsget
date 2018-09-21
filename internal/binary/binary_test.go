@@ -19,25 +19,26 @@ import (
 	"testing"
 )
 
-func TestCheckMagic(t *testing.T) {
+func TestExpectBytes(t *testing.T) {
 	testCases := []struct {
-		magic []byte
+		want  []byte
 		input []byte
 		match bool
 	}{
 		{[]byte("BCF\x02\x02"), []byte("BCF\x02\x02"), true},
 		{[]byte("BCF\x02\x02"), []byte("BCF\x02\x02EXTRA"), true},
+		{[]byte("BCF\x02\x02"), []byte("BCF\x03\x02"), false},
 		{[]byte("BCF\x02\x02"), []byte("BCF\x02"), false},
 		{[]byte("BCF\x02\x02"), []byte(""), false},
 	}
 
-	for i, tc := range testCases {
-		t.Run(string(i), func(t *testing.T) {
-			err := CheckMagic(bytes.NewReader(tc.input), tc.magic)
+	for _, tc := range testCases {
+		t.Run(string(tc.input), func(t *testing.T) {
+			err := ExpectBytes(bytes.NewReader(tc.input), tc.want)
 			if err != nil && tc.match {
-				t.Fatalf("CheckMagic rejected valid magic %v: %v", tc.match, err)
+				t.Fatalf("ExpectBytes returned unexpected error: %v", err)
 			} else if err == nil && !tc.match {
-				t.Fatalf("CheckMagic accepted invalid magic %v", tc.match)
+				t.Fatalf("ExpectBytes accepted mismatched input %v", tc.match)
 			}
 		})
 	}
