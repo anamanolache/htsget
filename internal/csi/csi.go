@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package csi contains support for processing the information in a CSI file.
+// Package csi contains support for processing the information in a CSI file (http://samtools.github.io/hts-specs/CSIv1.pdf).
 package csi
 
 import (
@@ -27,11 +27,7 @@ import (
 )
 
 const (
-	csiMagic          = "CSI\x01"
-	maximumReadLength = 1 << 29
-
-	// This ID is used as a virtual bin ID for (unused) chunk metadata.
-	MetadataBeanID = 37450
+	csiMagic = "CSI\x01"
 )
 
 // RegionContainsBin indicates if the given region contains the bin described by
@@ -53,19 +49,22 @@ func RegionContainsBin(region genomics.Region, referenceID int32, binID uint32, 
 	return false
 }
 
-// BinsForRange calculates the list of bins that may overlap with region [beg,end) (zero-based).
-// This function is derived from the C examples in the CSI index specification.
+// BinsForRange returns the list of bins that may overlap with the zero-based region
+// defined by [start, end). The minShift and depth parameters control the minimum interval width
+// and number of binning levels, respectively.
 func BinsForRange(start, end uint32, minShift, depth int32) []uint16 {
-	if end == 0 || end > maximumReadLength {
-		end = maximumReadLength
+	maxWidth := maximumBinWidth(minShift, depth)
+	if end == 0 || end > maxWidth {
+		end = maxWidth
 	}
 	if end <= start {
 		return nil
 	}
-	if start > maximumReadLength {
+	if start > maxWidth {
 		return nil
 	}
 
+	// This is derived from the C examples in the CSI index specification.
 	end--
 	var bins []uint16
 	for l, t, s := uint(0), uint(0), uint(minShift+depth*3); l <= uint(depth); l++ {
@@ -78,6 +77,10 @@ func BinsForRange(start, end uint32, minShift, depth int32) []uint16 {
 		t += 1 << (l * 3)
 	}
 	return bins
+}
+
+func maximumBinWidth(minShift, depth int32) uint32 {
+	return uint32(1 << uint32(minShift+depth*3))
 }
 
 // Read reads index data from csi and returns a set of BGZF chunks covering
@@ -137,9 +140,6 @@ func Read(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error) {
 				var chunk bgzf.Chunk
 				if err := binary.Read(gzr, &chunk); err != nil {
 					return nil, fmt.Errorf("reading chunk: %v", err)
-				}
-				if bin.ID == MetadataBeanID {
-					continue
 				}
 				if includeChunks && (chunk.End >= bgzf.Address(bin.Offset)) {
 					chunks = append(chunks, &chunk)

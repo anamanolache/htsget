@@ -37,7 +37,9 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/googlegenomics/htsget/internal/analytics"
 	"github.com/googlegenomics/htsget/internal/bam"
+	"github.com/googlegenomics/htsget/internal/bcf"
 	"github.com/googlegenomics/htsget/internal/bgzf"
+	"github.com/googlegenomics/htsget/internal/csi"
 	"github.com/googlegenomics/htsget/internal/genomics"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
@@ -45,8 +47,9 @@ import (
 )
 
 const (
-	readsPath = "/reads/"
-	blockPath = "/block/"
+	readsPath    = "/reads/"
+	blockPath    = "/block/"
+	variantsPath = "/variants/"
 
 	eofMarkerDataURL = "data:;base64,H4sIBAAAAAAA/wYAQkMCABsAAwAAAAAAAAAAAA=="
 )
@@ -93,23 +96,67 @@ func (server *Server) Whitelist(buckets []string) {
 func (server *Server) Export(mux *http.ServeMux) {
 	mux.Handle(readsPath, forwardOrigin(server.serveReads))
 	mux.Handle(blockPath, forwardOrigin(server.serveBlocks))
+	mux.Handle(variantsPath, forwardOrigin(server.serveVariants))
 }
 
 func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
+	reads := resource{
+		resourceType: "Reads",
+		resourcePath: readsPath,
+		outputFormat: "BAM",
+		indexes: func(object string) []string {
+			return []string{
+				object + ".bai",
+				strings.TrimSuffix(object, ".bam") + ".bai",
+			}
+		},
+		read:           bam.Read,
+		getReferenceID: bam.GetReferenceID,
+	}
+	server.serveChunks(w, reads, req)
+}
+
+func (server *Server) serveVariants(w http.ResponseWriter, req *http.Request) {
+	reads := resource{
+		resourceType: "Variants",
+		resourcePath: variantsPath,
+		outputFormat: "BCF",
+		indexes: func(object string) []string {
+			return []string{
+				object + ".csi",
+				strings.TrimSuffix(object, ".bcf.gz") + ".csi",
+			}
+		},
+		read:           csi.Read,
+		getReferenceID: bcf.GetReferenceID,
+	}
+	server.serveChunks(w, reads, req)
+}
+
+type resource struct {
+	resourceType   string
+	resourcePath   string
+	outputFormat   string
+	indexes        func(string) []string
+	read           func(csiFile io.Reader, region genomics.Region) ([]*bgzf.Chunk, error)
+	getReferenceID func(bam io.Reader, reference string) (int32, error)
+}
+
+func (server *Server) serveChunks(w http.ResponseWriter, res resource, req *http.Request) {
 	ctx := req.Context()
 
 	track := analytics.TrackerFromContext(ctx)
-	track(analytics.Event("Reads", "Reads Request Received", "", nil))
+	track(analytics.Event(res.resourceType, fmt.Sprintf("%s Request Received", res.resourceType), "", nil))
 
 	query := req.URL.Query()
-	if err := parseFormat(query.Get("format")); err != nil {
+	if err := parseFormat(query.Get("format"), res.outputFormat); err != nil {
 		writeError(w, newUnsupportedFormatError(err))
 		return
 	}
 
-	bucket, object, err := parseID(req.URL.Path[len(readsPath):])
+	bucket, object, err := parseID(req.URL.Path[len(res.resourcePath):])
 	if err != nil {
-		writeError(w, newInvalidInputError("parsing readset ID", err))
+		writeError(w, newInvalidInputError("parsing resource set ID", err))
 		return
 	}
 
@@ -131,7 +178,7 @@ func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
 	}
 	defer data.Close()
 
-	region, err := parseRegion(query, data)
+	region, err := parseRegion(query, res, data)
 	if err != nil {
 		writeError(w, newInvalidInputError("parsing region", err))
 		return
@@ -142,17 +189,20 @@ func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	request := &readsRequest{
-		indexObjects: []*storage.ObjectHandle{gcs.Bucket(bucket).Object(object + ".bai"),
-			gcs.Bucket(bucket).Object(strings.TrimSuffix(object, ".bam") + ".bai"),
-		},
+	indexObjects := []*storage.ObjectHandle{}
+	for _, indexName := range res.indexes(object) {
+		indexObjects = append(indexObjects, gcs.Bucket(bucket).Object(indexName))
+	}
+	request := &chunksRequest{
+		indexObjects:   indexObjects,
 		blockSizeLimit: server.blockSizeLimit,
 		region:         region,
+		read:           res.read,
 	}
 
 	chunks, err := request.handle(ctx)
 	if err != nil {
-		track(analytics.Event("Reads", "Reads Internal Error", "", nil))
+		track(analytics.Event(res.resourceType, fmt.Sprintf("%s Internal Error", res.resourceType), "", nil))
 		writeError(w, err)
 		return
 	}
@@ -166,7 +216,7 @@ func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
 		}
 		base += req.Host
 	}
-	base += strings.Replace(req.URL.Path, readsPath, blockPath, 1)
+	base += strings.Replace(req.URL.Path, res.resourcePath, blockPath, 1)
 
 	var urls []map[string]interface{}
 	for _, chunk := range chunks {
@@ -194,7 +244,7 @@ func (server *Server) serveReads(w http.ResponseWriter, req *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"htsget": map[string]interface{}{
-			"format": "BAM",
+			"format": res.outputFormat,
 			"urls":   urls,
 		}})
 
@@ -277,14 +327,14 @@ func parseID(path string) (string, string, error) {
 	return "", "", errInvalidOrUnspecifiedID
 }
 
-func parseFormat(format string) error {
-	if format != "" && format != "BAM" {
+func parseFormat(format, supportedFormat string) error {
+	if format != "" && format != supportedFormat {
 		return fmt.Errorf("unsupported format %q", format)
 	}
 	return nil
 }
 
-func parseRegion(query url.Values, data io.Reader) (genomics.Region, error) {
+func parseRegion(query url.Values, res resource, data io.Reader) (genomics.Region, error) {
 	var (
 		name  = query.Get("referenceName")
 		start = query.Get("start")
@@ -297,7 +347,7 @@ func parseRegion(query url.Values, data io.Reader) (genomics.Region, error) {
 		return genomics.Region{}, errMissingReferenceName
 	}
 
-	id, err := bam.GetReferenceID(data, name)
+	id, err := res.getReferenceID(data, name)
 	if err != nil {
 		return genomics.Region{}, fmt.Errorf("resolving reference %q: %v", name, err)
 	}
