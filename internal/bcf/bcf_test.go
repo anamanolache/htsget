@@ -17,12 +17,16 @@ package bcf
 import (
 	"fmt"
 	"os"
+<<<<<<< HEAD
 	"strings"
+=======
+>>>>>>> origin/serveVariants2
 	"testing"
 )
 
 func TestGetReferenceId(t *testing.T) {
 	testCases := []struct {
+<<<<<<< HEAD
 		file   string
 		name   string
 		id     int32
@@ -36,6 +40,21 @@ func TestGetReferenceId(t *testing.T) {
 		{"bcf_without_idx.bcf.gz", "19", 0, ""},
 		{"bcf_without_idx.bcf.gz", "Y", 2, ""},
 		{"bcf_without_idx.bcf.gz", "Z", 0, "reference name not found"},
+=======
+		file string
+		name string
+		id   int
+		err  bool
+	}{
+		// The test file bcf_with_idx.bcf.gz has the contig lines in reverse order
+		// and the region id is given by the IDX field.
+		{"bcf_with_idx.bcf.gz", "19", 0, false},
+		{"bcf_with_idx.bcf.gz", "Y", 2, false},
+		{"bcf_with_idx.bcf.gz", "Z", 0, true},
+		{"bcf_without_idx.bcf.gz", "19", 0, false},
+		{"bcf_without_idx.bcf.gz", "Y", 2, false},
+		{"bcf_without_idx.bcf.gz", "Z", 0, true},
+>>>>>>> origin/serveVariants2
 	}
 
 	for _, tc := range testCases {
@@ -46,7 +65,11 @@ func TestGetReferenceId(t *testing.T) {
 			}
 			defer r.Close()
 
+<<<<<<< HEAD
 			if id, err := GetReferenceID(r, tc.name); err != nil && !strings.Contains(err.Error(), tc.errMsg) {
+=======
+			if id, err := GetReferenceID(r, tc.name); err != nil && (err == nil) == tc.err {
+>>>>>>> origin/serveVariants2
 				t.Fatalf("GetReferenceID() returned unexpected error: %v", err)
 			} else if id != tc.id {
 				t.Fatalf("Wrong reference ID: got %d, want %d", id, tc.id)
@@ -78,7 +101,11 @@ func TestContigField(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestGetIDX(t *testing.T) {
+=======
+func TestResolveID(t *testing.T) {
+>>>>>>> origin/serveVariants2
 	testCases := []struct {
 		line string
 		want int
@@ -92,7 +119,11 @@ func TestGetIDX(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.line, func(t *testing.T) {
+<<<<<<< HEAD
 			if got, _ := getIdx(tc.line); got != tc.want {
+=======
+			if got, _ := resolveID(tc.line, -1); got != tc.want {
+>>>>>>> origin/serveVariants2
 				t.Fatalf("Wrong getIdx response, want %d, got %d ", tc.want, got)
 			}
 		})

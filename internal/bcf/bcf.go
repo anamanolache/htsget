@@ -33,7 +33,11 @@ const (
 
 // GetReferenceID retrieves the reference id of the given referenceName
 // from the provided bcf file.
+<<<<<<< HEAD
 func GetReferenceID(bcf io.Reader, referenceName string) (int32, error) {
+=======
+func GetReferenceID(bcf io.Reader, referenceName string) (int, error) {
+>>>>>>> origin/serveVariants2
 	gzr, err := gzip.NewReader(bcf)
 	if err != nil {
 		return 0, fmt.Errorf("initializing gzip reader: %v", err)
@@ -49,6 +53,7 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int32, error) {
 		return 0, fmt.Errorf("reading header length: %v", err)
 	}
 
+<<<<<<< HEAD
 	headerReader := io.LimitReader(gzr, int64(length))
 	scanner := bufio.NewScanner(headerReader)
 	var id int32
@@ -63,6 +68,14 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int32, error) {
 					return int32(idx), nil
 				}
 				return id, nil
+=======
+	scanner := bufio.NewScanner(io.LimitReader(gzr, int64(length)))
+	var id int
+	for scanner.Scan() {
+		if line := scanner.Text(); strings.HasPrefix(line, "##contig") {
+			if contigField(line, "ID") == referenceName {
+				return resolveID(line, id)
+>>>>>>> origin/serveVariants2
 			}
 			id++
 		} else if id > 0 {
@@ -75,6 +88,7 @@ func GetReferenceID(bcf io.Reader, referenceName string) (int32, error) {
 	return 0, errors.New("reference name not found")
 }
 
+<<<<<<< HEAD
 func GetIndexNames(object string) []string {
 	return []string{
 		object + ".csi",
@@ -82,6 +96,8 @@ func GetIndexNames(object string) []string {
 	}
 }
 
+=======
+>>>>>>> origin/serveVariants2
 func contigField(input, name string) string {
 	field := name + "="
 	for {
@@ -89,6 +105,7 @@ func contigField(input, name string) string {
 		if start == -1 {
 			return ""
 		}
+<<<<<<< HEAD
 		wholeWord := func() bool {
 			if start == 0 || isDelimiter(input[start-1]) {
 				return true
@@ -97,13 +114,23 @@ func contigField(input, name string) string {
 		}()
 		input = input[start+len(field):]
 		if !wholeWord {
+=======
+		skip := start > 0 && !isDelimiter(input[start-1])
+		input = input[start+len(field):]
+		if skip {
+>>>>>>> origin/serveVariants2
 			continue
 		}
 		if end := strings.IndexAny(input, ",>"); end > 0 {
 			return input[:end]
+<<<<<<< HEAD
 		} else {
 			return input
 		}
+=======
+		}
+		return input
+>>>>>>> origin/serveVariants2
 	}
 }
 
@@ -111,9 +138,17 @@ func isDelimiter(chr byte) bool {
 	return chr == ',' || chr == '<'
 }
 
+<<<<<<< HEAD
 func getIdx(contig string) (int, error) {
 	if idx := contigField(contig, "IDX"); idx != "" {
 		return strconv.Atoi(idx)
 	}
 	return -1, nil
+=======
+func resolveID(contig string, id int) (int, error) {
+	if idx := contigField(contig, "IDX"); idx != "" {
+		return strconv.Atoi(idx)
+	}
+	return id, nil
+>>>>>>> origin/serveVariants2
 }
