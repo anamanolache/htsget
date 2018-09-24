@@ -17,6 +17,7 @@ package bcf
 import (
 	"fmt"
 	"os"
+
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestGetReferenceId(t *testing.T) {
 	testCases := []struct {
 		file string
 		name string
-		id   int
+		id   int32
 		err  bool
 	}{
 		// The test file bcf_with_idx.bcf.gz has the contig lines in reverse order
@@ -80,7 +81,7 @@ func TestContigField(t *testing.T) {
 func TestResolveID(t *testing.T) {
 	testCases := []struct {
 		line string
-		want int
+		want int32
 	}{
 		{"##contig=<ID=chr1,length=248956422>", -1},
 		{"##contig=<ID=chr1,length=248956422,IDX=0>", 0},
